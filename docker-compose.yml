@@ -1,0 +1,70 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HOST_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_HOST_PORT:-6334}:6334"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/localhost/6333; printf \"GET /healthz HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \"healthz check passed\" <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama:
+    image: ollama/ollama:0.32.5
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  mcp-server:
+    build:
+      context: ./mcp
+      args:
+        QDRANT_MCP_REPO: "${QDRANT_MCP_REPO:-https://github.com/mhalder/qdrant-mcp-server.git}"
+        QDRANT_MCP_REF: "${QDRANT_MCP_REF:-v3.3.5}"
+    restart: unless-stopped
+    ports:
+      - "${MCP_HOST_PORT:-3000}:3000"
+    environment:
+      TRANSPORT_MODE: "${TRANSPORT_MODE:-http}"
+      HTTP_PORT: "${HTTP_PORT:-3000}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-ollama}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-nomic-embed-text}"
+      EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-http://ollama:11434}"
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      QDRANT_API_KEY: "${QDRANT_API_KEY:-}"
+      COLLECTION_NAME: "${QDRANT_COLLECTION:-front-codebase}"
+    volumes:
+      - "${FRONT_PROJECT_PATH:-/home/sham/PhpstormProjects/front}:/workspace/front:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'fetch(\"http://localhost:3000/health\").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  pull-embedding-model:
+    image: ollama/ollama:0.32.5
+    profiles: ["setup"]
+    environment:
+      OLLAMA_HOST: "${OLLAMA_URL:-http://ollama:11434}"
+    entrypoint: ["ollama"]
+    command: ["pull", "${EMBEDDING_MODEL:-nomic-embed-text}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
