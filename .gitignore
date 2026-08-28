@@ -3,3 +3,4 @@
 /data/qdrant/
 /data/redis/
 /.idea/*
+/.codex/

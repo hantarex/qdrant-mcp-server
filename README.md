@@ -1,4 +1,4 @@
-# Qdrant + Ollama MCP Server
+# Qdrant + Ollama + Redis MCP Services
 
 Local semantic memory for Codex:
 
@@ -21,6 +21,7 @@ This project wraps these services with Docker Compose and `.env` configuration.
 ## Services
 
 - `qdrant`: vector database, exposed on `localhost:${QDRANT_HOST_PORT}`.
+- `qdrant` gRPC: exposed on `localhost:${QDRANT_GRPC_HOST_PORT}`.
 - `ollama`: local embedding provider, exposed on `localhost:${OLLAMA_HOST_PORT}`.
 - `mcp-server`: ready-made `mhalder/qdrant-mcp-server`, exposed as Streamable HTTP MCP on `localhost:${MCP_HOST_PORT}/mcp`.
 - `redis`: Redis service for agent transport experiments, exposed on `localhost:${REDIS_HOST_PORT}`.
@@ -48,6 +49,10 @@ docker compose up -d --build mcp-server
 
 ## Quick Checks
 
+These commands assume the default host ports from `.env.example`. If you change
+any `*_HOST_PORT` value, use the matching host port in the command or Codex MCP
+config.
+
 ```bash
 curl http://localhost:6333/healthz
 curl http://localhost:11434/api/tags
@@ -59,13 +64,13 @@ docker compose ps
 MCP endpoint:
 
 ```text
-http://localhost:3000/mcp
+http://localhost:${MCP_HOST_PORT}/mcp
 ```
 
 Redis TCP endpoint:
 
 ```text
-redis://localhost:6379/0
+redis://localhost:${REDIS_HOST_PORT}/0
 ```
 
 ## Codex MCP Config
@@ -76,6 +81,9 @@ Add this Qdrant MCP server to `~/.codex/config.toml`, then restart Codex:
 [mcp_servers.qdrant-codebase]
 url = "http://localhost:3000/mcp"
 ```
+
+If `MCP_HOST_PORT` is changed from the default `3000`, update this URL to the
+same host port.
 
 The official Redis MCP server currently uses stdio transport. Add it separately
 for every Codex/agent runtime that should access the shared Redis bus:
@@ -97,7 +105,8 @@ transport is stdin/stdout; `localhost:6379` is only the Redis TCP endpoint used
 by that process. Do not add a fixed Docker `--name` here, because multiple
 agents may start their own Redis MCP process at the same time. The Docker image
 is pinned by digest because Docker Hub currently publishes the official
-`mcp/redis` image without a versioned tag.
+`mcp/redis` image without a versioned tag. If `REDIS_HOST_PORT` is changed from
+the default `6379`, update `REDIS_PORT` in this config too.
 
 If you use `uvx` instead of Docker, the equivalent stdio MCP config is:
 
@@ -113,7 +122,7 @@ args = [
 ]
 ```
 
-## Available Tools
+## Qdrant MCP Tools
 
 - `create_collection`
 - `list_collections`
@@ -127,6 +136,13 @@ args = [
 - `get_index_status`
 - `index_git_history`
 - `search_git_history`
+
+## Redis MCP Tools
+
+The Redis MCP tools are provided by the separate stdio `redis-agent-bus`
+configuration above. The official Redis MCP server includes string/hash/list/set
+operations, Pub/Sub tools, and Redis Streams tools such as `xadd`,
+`xreadgroup`, and `xack`.
 
 ## Index The Front Project
 
@@ -159,12 +175,8 @@ QDRANT_COLLECTION=front-codebase
 EMBEDDING_PROVIDER=ollama
 EMBEDDING_MODEL=nomic-embed-text
 EMBEDDING_BASE_URL=http://ollama:11434
-TRANSPORT_MODE=http
-HTTP_PORT=3000
 MCP_HOST_PORT=3000
 REDIS_HOST_PORT=6379
-REDIS_URL=redis://redis:6379/0
-REDIS_MCP_URL=redis://localhost:6379/0
 REDIS_IMAGE=redis:8.10.1-alpine
 FRONT_PROJECT_PATH=/home/sham/PhpstormProjects/front
 ```
