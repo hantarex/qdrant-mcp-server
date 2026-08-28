@@ -26,6 +26,20 @@ services:
       timeout: 5s
       retries: 12
 
+  redis:
+    image: "${REDIS_IMAGE:-redis:8.10.1-alpine}"
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   mcp-server:
     build:
       context: ./mcp

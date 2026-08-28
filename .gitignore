@@ -1,4 +1,5 @@
 /.env
 /data/ollama/
 /data/qdrant/
+/data/redis/
 /.idea/*
